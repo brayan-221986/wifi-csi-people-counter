@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiFi CSI — Realtime Analytics</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+[data-bs-theme="dark"] {
+    --bg-gradient: linear-gradient(180deg, #0a0915 0%, #121124 100%);
+    --panel-bg: rgba(255, 255, 255, 0.03);
+    --panel-border: rgba(255, 255, 255, 0.07);
+    --card-bg: rgba(18, 17, 36, 0.7);
+    --text-main: #ffffff;
+    --text-muted: rgba(255, 255, 255, 0.4);
+    --text-tick: rgba(255, 255, 255, 0.25);
+    --item-bg: rgba(255, 255, 255, 0.02);
+}
+[data-bs-theme="light"] {
+    --bg-gradient: linear-gradient(180deg, #f4f5f9 0%, #e9ecf5 100%);
+    --panel-bg: rgba(0, 0, 0, 0.02);
+    --panel-border: rgba(0, 0, 0, 0.08);
+    --card-bg: rgba(255, 255, 255, 0.75);
+    --text-main: #121124;
+    --text-muted: rgba(18, 17, 36, 0.5);
+    --text-tick: rgba(18, 17, 36, 0.4);
+    --item-bg: rgba(0, 0, 0, 0.03);
+}
+:root {
+    --glow-color: #00ff88;
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { min-height:100vh; background: var(--bg-gradient); font-family: var(--font-sans); color: var(--text-main); transition: background 0.3s ease, color 0.3s ease; }
+.dashboard { display:flex; flex-direction:column; min-height:100vh; padding:1rem; gap:1rem; max-width: 1400px; margin: 0 auto; }
+@media (min-width: 768px) { .dashboard { padding: 1.5rem; gap: 1.2rem; height: 100vh; overflow: hidden; } }
+.theme-toggle {
+    background: var(--card-bg);
+    border: 1px solid var(--panel-border);
+    color: var(--text-main);
+    padding: 0.5rem 1rem;
+    border-radius: 50px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    transition: all 0.2s ease;
+}
+.theme-toggle:hover { transform: scale(1.05); }
+.main-card { 
+    flex:0 0 auto; 
+    background: var(--card-bg);
+    backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); 
+    border-radius: 24px; 
+    border: 1px solid var(--panel-border); 
+    padding: 1.5rem; 
+    position: relative; 
+    overflow: hidden;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: background 0.3s, border 0.3s;
+}
+@media (min-width: 768px) { .main-card { padding: 2rem 2.5rem; } }
+.main-card::before { 
+    content:''; position:absolute; inset:0; border-radius:24px; padding:1px; 
+    background:linear-gradient(135deg, var(--glow-color), transparent 40%, transparent 60%, var(--panel-border)); 
+    -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); 
+    -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none;
+}
+.prediction-wrapper { display: flex; align-items: baseline; gap: 0.6rem; }
+.prediction-number { font-family: var(--font-mono); font-size: 4.5rem; font-weight: 700; line-height: 0.9; }
+@media (min-width: 768px) { .prediction-number { font-size: 6.5rem; } }
+.prediction-number.changed { animation: pulseGlow 0.5s ease-out; }
+@keyframes pulseGlow {
+    0% { transform: scale(1); filter: drop-shadow(0 0 0px var(--glow-color)); }
+    50% { transform: scale(1.05); filter: drop-shadow(0 0 20px var(--glow-color)); }
+    100% { transform: scale(1); filter: drop-shadow(0 0 0px var(--glow-color)); }
+}
+.prediction-label { font-size:0.9rem; color: var(--text-muted); font-weight:600; text-transform: uppercase; letter-spacing: 0.05em; }
+.brand-title { font-weight: 800; font-size: 1.1rem; color: var(--text-main); }
+.prediction-time { font-family: var(--font-mono); font-size:0.85rem; color: var(--glow-color); font-weight: bold; }
+.row-main { flex:1; display:flex; flex-direction: column; gap:1rem; min-height:0; }
+@media (min-width: 992px) { .row-main { flex-direction: row; gap: 1.2rem; } }
+.col-chart { flex:2; display:flex; flex-direction:column; min-height: 300px; }
+@media (min-width: 992px) { .col-chart { min-height: 0; } }
+.col-history { flex:1; display:flex; flex-direction:column; min-height: 250px; }
+@media (min-width: 992px) { .col-history { max-width: 380px; min-height: 0; } }
+.panel { 
+    background: var(--panel-bg); 
+    backdrop-filter: blur(16px); 
+    border-radius: 20px; 
+    border: 1px solid var(--panel-border); 
+    padding: 1.2rem; 
+    flex:1; 
+    display:flex; 
+    flex-direction:column;
+    transition: background 0.3s, border 0.3s;
+}
+.panel-title { font-size:0.75rem; font-weight: 700; text-transform:uppercase; letter-spacing:0.12em; color: var(--text-muted); margin-bottom:1rem; display: flex; align-items: center; gap: 0.5rem; }
+.panel-title::before { content: ''; width: 6px; height: 6px; background: var(--glow-color); border-radius: 50%; box-shadow: 0 0 8px var(--glow-color); }
+.chart-wrap { flex:1; position:relative; min-height:0; width: 100%; }
+.history-list { flex:1; overflow-y:auto; display: flex; flex-direction: column; gap: 0.4rem; max-height: 350px; scrollbar-width: none; }
+@media (min-width: 992px) { .history-list { max-height: none; } }
+.history-list::-webkit-scrollbar { display: none; }
+.history-item { 
+    display:flex; align-items:center; justify-content:space-between; 
+    padding:0.65rem 0.9rem; border-radius:12px; 
+    background: var(--item-bg); 
+    border: 1px solid var(--panel-border);
+    transition: all 0.2s ease; 
+}
+.history-item:hover { background: var(--panel-border); transform: translateX(2px); }
+.history-time { font-family: var(--font-mono); font-size:0.8rem; color: var(--text-muted); }
+.history-value { font-family: var(--font-mono); font-weight:700; font-size:1rem; }
+.footer-dots { flex:0 0 auto; display:flex; flex-wrap: wrap; align-items:center; justify-content:center; gap:0.6rem; padding: 0.6rem; background: var(--item-bg); border-radius: 16px; border: 1px solid var(--panel-border); }
+.dot-wrap { display:flex; flex-direction:column; align-items:center; gap: 4px; }
+.dot { width:10px; height:10px; border-radius:50%; background: var(--text-tick); transition:all 0.3s ease; }
+.dot.active { transform:scale(1.3); box-shadow:0 0 15px var(--dot-color); background: var(--dot-color) !important; }
+.dot-label { font-family: var(--font-mono); font-size:0.65rem; opacity:0.4; color: var(--text-main); }
+.dot.active + .dot-label { opacity:1; font-weight: bold; color: var(--dot-color); }
+.footer-stats { flex:0 0 auto; text-align:center; font-family: var(--font-mono); font-size:0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: 0.5rem; }
+</style>
+</head>
+<body>
+
+<div class="dashboard" id="app">
+    <div class="main-card" id="mainCard">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+                <div class="prediction-wrapper">
+                    <span class="prediction-number" id="predNumber">--</span>
+                    <span class="prediction-label" id="labelPersonas">personas</span>
+                </div>
+            </div>
+            <div class="text-md-end d-flex flex-row flex-md-column align-items-center align-items-md-end justify-content-between w-100 w-sm-auto logic-block gap-3">
+                <button class="theme-toggle order-md-2" id="themeBtn" onclick="toggleTheme()">☀️ Modo Claro</button>
+                <div class="order-md-1 text-end">
+                    <div class="brand-title">CSI Space Analytics</div>
+                    <div class="prediction-time" id="predTime">--:--:--</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row-main">
+        <div class="col-chart panel">
+            <div class="panel-title">Monitoreo en tiempo real (60s)</div>
+            <div class="chart-wrap"><canvas id="chart"></canvas></div>
+        </div>
+        <div class="col-history panel">
+            <div class="panel-title">Registro de métricas</div>
+            <div class="history-list" id="historyList"></div>
+        </div>
+    </div>
+
+    <div class="footer-dots" id="dotsContainer"></div>
+    <div class="footer-stats" id="footerStats">Sincronizando con sensor de red...</div>
+</div>
+
+<script>
+const DISPLAY = {0:'0',1:'1',2:'2',3:'3',4:'4',5:'5',6:'6',7:'7'};
+const DOT_COLORS = ['#00ff88','#52ff52','#a8ff3e','#ffe600','#ff9100','#ff4400','#ea0000','#990000'];
+const labels = [], values = [];
+const ctx = document.getElementById('chart').getContext('2d');
+
+const chart = new Chart(ctx, {
+    type:'line', 
+    data:{
+        labels, 
+        datasets:[{
+            label:'Personas', data:values, 
+            borderColor:'#00ff88', backgroundColor: 'rgba(0, 255, 136, 0.02)',
+            fill:true, tension:0.4, pointRadius:1.5, pointHoverRadius: 5,
+            pointBackgroundColor:'#00ff88', borderWidth:2.5
+        }]
+    },
+    options:{
+        responsive:true, maintainAspectRatio:false,
+        animation:{duration:300},
+        scales:{
+            x:{
+                grid:{color:() => getComputedStyle(document.documentElement).getPropertyValue('--panel-border')}, 
+                ticks:{color:() => getComputedStyle(document.documentElement).getPropertyValue('--text-tick'), font:{family:'JetBrains Mono', size:9}, maxTicksLimit:5}
+            },
+            y:{
+                min:0, max:7,
+                grid:{color:() => getComputedStyle(document.documentElement).getPropertyValue('--panel-border')}, 
+                ticks:{stepSize:1, color:() => getComputedStyle(document.documentElement).getPropertyValue('--text-tick'), font:{family:'JetBrains Mono', size:9}, callback:v=>DISPLAY[v]||v}
+            }
+        },
+        plugins:{
+            legend:{display:false}, 
+            tooltip:{
+                backgroundColor: () => document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'rgba(14, 13, 28, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                titleColor: () => document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#fff' : '#000',
+                bodyColor: () => document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#fff' : '#000',
+                titleFont: {family: 'Plus Jakarta Sans', weight: 'bold'}, bodyFont: {family: 'JetBrains Mono'},
+                borderColor: 'rgba(0,0,0,0.05)', borderWidth: 1, borderRadius:12, padding:10, displayColors: false,
+                callbacks:{label:ctx=>'Ocupación: '+(DISPLAY[ctx.parsed.y]||ctx.parsed.y)+' pers.'}
+            }
+        }
+    }
+});
+
+function toggleTheme() {
+    const html = document.documentElement;
+    const btn = document.getElementById('themeBtn');
+    if (html.getAttribute('data-bs-theme') === 'dark') {
+        html.setAttribute('data-bs-theme', 'light');
+        btn.innerHTML = '🌙 Modo Oscuro';
+    } else {
+        html.setAttribute('data-bs-theme', 'dark');
+        btn.innerHTML = '☀️ Modo Claro';
+    }
+    setGlow('class-' + (values[values.length - 1] || 0));
+}
+
+function setGlow(cls) {
+    const idx = parseInt(cls.replace('class-','')) || 0;
+    const c = DOT_COLORS[idx] || '#00ff88';
+    document.documentElement.style.setProperty('--glow-color', c);
+    const ds = chart.data.datasets[0];
+    ds.borderColor = c;
+    ds.pointBackgroundColor = c;
+    const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.clientHeight || 300);
+    gradient.addColorStop(0, c + '25');
+    gradient.addColorStop(1, c + '00');
+    ds.backgroundColor = gradient;
+    chart.update('none');
+}
+
+function update(entries) {
+    const predEl = document.getElementById('predNumber');
+    const timeEl = document.getElementById('predTime');
+    const histEl = document.getElementById('historyList');
+    const dotsEl = document.getElementById('dotsContainer');
+    const statsEl = document.getElementById('footerStats');
+    const labelPers = document.getElementById('labelPersonas');
+    if (!entries.length) return;
+    const last = entries[entries.length-1];
+    const idx = last.prediction in DISPLAY ? last.prediction : 0;
+    const label = DISPLAY[idx] || idx;
+    labelPers.textContent = parseInt(label) === 1 ? 'persona' : 'personas';
+    if (predEl.textContent !== label) {
+        predEl.classList.remove('changed');
+        void predEl.offsetWidth;
+        predEl.textContent = label;
+        predEl.classList.add('changed');
+        setGlow('class-'+idx);
+    }
+    timeEl.textContent = last.timestamp;
+    const recent = entries.slice(-60);
+    labels.length = 0; values.length = 0;
+    recent.forEach(e => {const v=e.prediction in DISPLAY?e.prediction:0; labels.push(e.timestamp); values.push(v)});
+    chart.update('none');
+    histEl.innerHTML = '';
+    entries.slice(-20).reverse().forEach(e => {
+        const vi = e.prediction in DISPLAY ? e.prediction : 0;
+        const c = DOT_COLORS[vi] || '#555';
+        histEl.innerHTML += '<div class="history-item"><span class="history-time">'+e.timestamp+'</span><span class="history-value" style="color:'+c+'">'+(DISPLAY[e.prediction]||e.prediction)+'</span></div>';
+    });
+    dotsEl.innerHTML = '';
+    for (let i = 0; i <= 7; i++) {
+        const active = i === idx ? ' active' : '';
+        dotsEl.innerHTML += '<div class="dot-wrap"><div class="dot'+active+'" style="--dot-color:'+DOT_COLORS[i]+'; background:'+(active?DOT_COLORS[i]:'var(--panel-border)')+'"></div><span class="dot-label">'+i+'</span></div>';
+    }
+    if (entries.length > 1) {
+        const vals = entries.map(e => e.prediction in DISPLAY ? e.prediction : 0);
+        const min = Math.min(...vals), max = Math.max(...vals);
+        statsEl.textContent = 'HISTÓRICO MÍN: '+DISPLAY[min]+' · MÁX: '+DISPLAY[max]+'  |  STATUS: OPERATIVO';
+    }
+}
+
+async function poll() {
+    try {
+        const r = await fetch('/api/data'), d = await r.json();
+        if (d.length) update(d);
+    } catch(e) {}
+}
+setInterval(poll,2000);
+poll();
+</script>
+</body>
+</html>

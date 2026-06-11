@@ -1,0 +1,53 @@
+menu "ESP32 CSI Tool Config"
+
+    config WIFI_CHANNEL
+        int "WiFi Channel"
+        default 6
+        help
+            Select the WiFi channel of the AP.
+
+    config ESP_WIFI_SSID
+        string "WiFi SSID"
+        default "CSI-AP"
+        help
+            SSID to connect to.
+
+    config ESP_WIFI_PASSWORD
+        string "WiFi Password"
+        default ""
+        help
+            WiFi password (WPA or WPA2). Leave empty for open AP.
+
+    config PACKET_RATE
+        int "Packet TX Rate"
+        default "20"
+        help
+            Packets per second. Default 20 for initial validation.
+
+    config SHOULD_COLLECT_CSI
+        bool "Should this ESP32 collect and print CSI data?"
+        default "n"
+        help
+            Usually only the AP captures CSI. Disable unless testing.
+
+    config SHOULD_COLLECT_ONLY_LLTF
+        depends on SHOULD_COLLECT_CSI
+        bool "Only collect LLTF?"
+        default "y"
+        help
+            If enabled, only output 128 bytes (LLTF).
+
+    config SEND_CSI_TO_SERIAL
+        depends on SHOULD_COLLECT_CSI
+        bool "Send CSI data to Serial"
+        default "y"
+        help
+            Send CSI data through USB serial.
+
+    config SEND_CSI_TO_SD
+        depends on SHOULD_COLLECT_CSI
+        bool "Send CSI data to SD"
+        default "n"
+        help
+            Store CSI data to SD card (if present).
+endmenu

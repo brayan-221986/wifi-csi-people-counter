@@ -1,0 +1,6 @@
+[submodule "firmware/active_ap/components/esp32-csi-tool"]
+	path = firmware/active_ap/components/esp32-csi-tool
+	url = https://github.com/StevenMHernandez/ESP32-CSI-Tool.git
+[submodule "firmware/active_sta/components/esp32-csi-tool"]
+	path = firmware/active_sta/components/esp32-csi-tool
+	url = https://github.com/StevenMHernandez/ESP32-CSI-Tool.git
