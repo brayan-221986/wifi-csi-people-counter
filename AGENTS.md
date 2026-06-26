@@ -14,8 +14,6 @@ ESP32 TX → WiFi → ESP32 RX → CSI → UART 460800 → PC → predict.py →
 3. ✅ TX genera tráfico UDP a 20 Hz
 4. ✅ RX imprime CSI_DATA (460800 baud)
 5. ✅ PC visualiza CSI_DATA y predice
-6. ❌ CSI cambia con movimiento humano (modelo predice "0" siempre — entrenado en otro entorno)
-7. 🔲 Estabilidad ≥ 5 minutos
 
 ## HISTORIAL DE SESIONES
 
