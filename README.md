@@ -1,135 +1,148 @@
-# WiFi CSI People Counter — Fase 1: Validación de captura CSI
+# WiFi CSI People Counter — Pipeline completo: captura + inferencia + dashboard
 
-## Objetivo de la fase
-
-Verificar que el sistema de captura CSI funciona correctamente:
+## Pipeline
 
 ```
-ESP32 TX  ── WiFi ──>  ESP32 RX  ── UART ──>  PC
-  (active_sta)          (active_ap)            (serial_monitor.py)
+ESP32 TX  ── WiFi ──>  ESP32 RX  ── UART 460800 ──>  PC (live_predict.py) ──HTTP──> Dashboard web
+(active_sta)            (active_ap)                   (model.pkl)                (localhost o AWS)
 ```
 
-No se implementa ML, dataset, ni procesamiento de CSI. Solo se valida que el flujo de datos es estable y observable.
+Hardware: 2× ESP32 + 2× cables USB-UART + PC con Linux.
 
-## Hardware requerido
+## Entorno de desarrollo
 
-- 2× ESP32 (cualquier modelo con WiFi)
-- 2× cables USB-UART (para conectar cada ESP32 al PC)
-- 1× PC con Linux
-
-## Conexión
-
-1. Conecta cada ESP32 al PC mediante cable USB-UART
-2. El ESP32 **RX** (active_ap) crea un AP WiFi con SSID `CSI-AP`
-3. El ESP32 **TX** (active_sta) se conecta automáticamente a `CSI-AP`
-4. El ESP32 TX envía paquetes UDP a 20 paq/s → el RX captura CSI
+| Componente | Versión |
+|------------|---------|
+| Python | 3.14+ |
+| OS | Linux (Ubuntu 26.04) |
+| Firmware | ESP-IDF vía PlatformIO |
+| IDE | VS Code (opcional) |
 
 ## Instalación
 
-### Dependencias del sistema
-
 ```bash
+# Dependencias del sistema
 sudo apt-get install -y git wget flex bison gperf python3 python3-pip \
     python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util
-```
 
-### PlatformIO (gestión de firmware)
-
-```bash
+# PlatformIO (firmware)
 pip install platformio
-```
 
-### Herramientas Python
-
-```bash
+# Herramientas Python
 pip install -r tools/requirements.txt
+pip install numpy scikit-learn xgboost flask requests
 ```
 
-## Compilar y flashear
+## Flashear firmwares
 
-### 1. ESP32 RX (active_ap)
+### 1. ESP32 RX (active_ap) — crea AP `CSI-AP`, captura CSI
 
 ```bash
 cd firmware/active_ap
-pio run --target menuconfig   # configurar CSI (opcional)
 pio run --target upload
-pio run --target monitor      # verificar que inicia como AP
 ```
 
-### 2. ESP32 TX (active_sta)
+### 2. ESP32 TX (active_sta) — se conecta al AP y envía UDP
 
 ```bash
 cd firmware/active_sta
-pio run --target menuconfig   # configurar SSID (CSI-AP) y PACKET_RATE
 pio run --target upload
-pio run --target monitor      # verificar que se conecta y envía tráfico
 ```
 
-> **Nota:** Conecta un ESP32 a la vez para evitar conflictos de puerto serial.
->
-> **Nota sobre baudrate:** El RX usa 115200 baud por defecto. Para aumentar a 921600 (recomendado para CSI a >20 paq/s):
-> ```bash
-> cd firmware/active_ap
-> pio run --target menuconfig   # Component config → ESP-TOOL... → UART console baud rate → 921600
-> pio run --target upload
-> ```
+> Conecta un ESP32 a la vez para evitar conflictos de puerto.
 
-## Ejecutar el monitor serial
+## 1. Ver captura CSI en vivo
 
 ```bash
-python tools/serial_monitor.py --port /dev/ttyUSB0 --baud 921600
+python3 tools/serial_monitor.py --port /dev/ttyUSB0 --baud 460800
 ```
 
-Filtra y muestra solo líneas que contienen `CSI_DATA`. Las líneas se imprimen sin modificar.
+Muestra líneas `CSI_DATA` en tiempo real. Ctrl+C para salir.
 
-### Estadísticas en tiempo real
+## 2. Predicción con ML + Dashboard web
+
+El RX (active_ap) imprime CSI a **460800 baud**. Identificá el puerto correcto (por ej. `/dev/ttyUSB0`).
+
+### Sin dashboard (solo consola)
 
 ```bash
-python tools/csi_stats.py --port /dev/ttyUSB0 --baud 921600
+python3 tools/live_predict.py /dev/ttyUSB0 460800
 ```
 
-Muestra CSI/s, throughput estimado y detecta pérdidas de conexión.
+### Con dashboard web
 
-## Cómo validar que CSI funciona
+```bash
+# Terminal 1: servidor web
+python3 aws_deploy/app.py
 
-1. El ESP32 RX debe imprimir líneas `CSI_DATA` por el serial
-2. El monitor serial en el PC debe mostrar esas líneas en tiempo real
-3. Los valores CSI (entre corchetes) deben cambiar visiblemente al mover una persona cerca de los ESP32
-4. El sistema debe mantenerse estable durante al menos 5 minutos
+# Terminal 2: predictor apuntando al dashboard
+python3 tools/live_predict.py /dev/ttyUSB0 460800 --aws-url http://localhost:5000
+```
 
-## Criterio de éxito
+Abrí `http://localhost:5000` en el navegador.
 
-- [ ] RX (active_ap) inicia automáticamente como AP
-- [ ] TX (active_sta) se conecta automáticamente al AP
-- [ ] TX genera tráfico UDP continuo
-- [ ] RX imprime `CSI_DATA` continuamente por UART
-- [ ] PC recibe y muestra `CSI_DATA`
-- [ ] Valores CSI cambian con movimiento humano
-- [ ] Captura estable ≥ 5 minutos
+Los datos viajan: ESP32 → serial → `live_predict.py` → HTTP POST → Flask → navegador.
 
-## Estructura del proyecto
+> Si tenés el dashboard desplegado en un servidor remoto, definí `DASHBOARD_URL` en `.env` o pasalo con `--aws-url`.
+
+## 3. Recolectar tu propio dataset
+
+`datos/` está en `.gitignore` porque contiene datos locales (MACs, entorno). Para entrenar tu propio modelo:
+
+1. Colocá los ESP32 en el entorno donde vas a medir
+2. Para cada cantidad de personas (0 a 7), grabá ~30s de CSI:
+   ```bash
+   python3 tools/serial_monitor.py --port /dev/ttyUSB0 --baud 460800 > datos/csi_p0_s1_milab.csv
+   ```
+3. El archivo debe llamarse `csi_p{personas}_s{session}_{desc}.csv`
+4. Repetí para cada valor de 0 a 7 personas
+
+## 4. Entrenar modelo
+
+```bash
+python3 tools/train_model.py
+```
+
+Entrena RF y XGBoost (clasificación + regresión), elige el mejor y exporta `model.pkl`.
+Por defecto: ventanas de 25 líneas, step 10, 8 clases (0-7 personas).
+
+## Estado del proyecto
+
+- ✅ RX inicia automáticamente como AP
+- ✅ TX se conecta automáticamente al AP y envía UDP
+- ✅ TX genera tráfico UDP a 20 Hz
+- ✅ RX imprime `CSI_DATA` a 460800 baud
+- ✅ PC visualiza CSI, predice y envía al dashboard web
+
+## Estructura
 
 ```
 firmware/
-├── active_ap/        # Firmware ESP32 RX (Access Point + CSI)
-│   └── components/
-│       └── esp32-csi-tool/   # Submodule (StevenMHernandez)
-└── active_sta/       # Firmware ESP32 TX (Station + UDP)
+├── active_ap/          # Firmware ESP32 RX (Access Point + CSI)
+│   └── components/esp32-csi-tool/   # Submodule
+└── active_sta/         # Firmware ESP32 TX (Station + UDP)
 
 tools/
-├── serial_monitor.py  # Visualización en tiempo real
-├── csi_stats.py       # Diagnóstico de throughput
-└── requirements.txt   # Dependencias Python
+├── serial_monitor.py   # Visualización CSI en vivo
+├── csi_stats.py        # Diagnóstico de throughput
+├── live_predict.py     # Inferencia en tiempo real
+├── train_model.py      # Entrenamiento de modelo ML
+└── requirements.txt    # Dependencias Python
 
-captures/             # Reservado para futuras capturas
+aws_deploy/
+├── app.py              # Servidor Flask (dashboard web)
+├── templates/          # HTML del dashboard
+└── requirements.txt    # Dependencias Flask
+
+captures/               # Capturas CSI crudas (reservado)
+datos/                  # Dataset local (en .gitignore)
+model.pkl               # Modelo entrenado localmente (en .gitignore)
 ```
 
-## Formato de salida CSI_DATA
-
-Cada línea CSI_DATA tiene el formato CSV con 26 campos:
+## Formato CSI_DATA
 
 ```
 CSI_DATA,role,mac,rssi,rate,sig_mode,mcs,bandwidth,...,len,[valores CSI]
 ```
 
-No se modifica el formato original de ESP32-CSI-Tool. El array CSI contiene pares I/Q (imaginario + real) como enteros con signo separados por espacios.
+Array CSI: pares I/Q (real + imaginario) como enteros con signo separados por espacios.

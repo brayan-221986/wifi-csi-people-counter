@@ -1,10 +1,13 @@
 import os, sys, pickle, time, json
 import numpy as np
 import serial
+from dotenv import load_dotenv
 try:
     import requests
 except ImportError:
     requests = None
+
+load_dotenv()
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'model.pkl')
 
@@ -61,12 +64,14 @@ def extract_features_from_window(window):
     return feat
 
 def main():
-    port = sys.argv[1] if len(sys.argv) > 1 else '/dev/ttyUSB1'
-    baud = int(sys.argv[2]) if len(sys.argv) > 2 else 460800
+    port = sys.argv[1] if len(sys.argv) > 1 else os.getenv('SERIAL_PORT', '/dev/ttyUSB1')
+    baud = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.getenv('SERIAL_BAUD', '460800'))
     aws_url = None
     for i, a in enumerate(sys.argv):
         if a == '--aws-url' and i + 1 < len(sys.argv):
             aws_url = sys.argv[i + 1].rstrip('/')
+    if aws_url is None:
+        aws_url = os.getenv('DASHBOARD_URL')
 
     ser = serial.Serial(port, baud, timeout=0.1)
     time.sleep(2)

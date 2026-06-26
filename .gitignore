@@ -20,6 +20,13 @@ __pycache__/
 .venv/
 venv/
 
+# Environment variables
+.env
+
+# Dataset (contiene MACs reales, datos locales)
+datos/
+model.pkl
+
 # OS
 .DS_Store
 Thumbs.db
