@@ -5,7 +5,7 @@ Validación de pipeline con modelo en vivo (inferencia en tiempo real).
 
 ## OBJETIVO
 ```
-ESP32 TX → WiFi → ESP32 RX → CSI → UART 460800 → PC → predict.py → PREDICTION
+ESP32 TX → WiFi → ESP32 RX → CSI → UART 460800 → PC → live_predict.py → Dashboard web
 ```
 
 ## CRITERIO DE ÉXITO
@@ -14,6 +14,7 @@ ESP32 TX → WiFi → ESP32 RX → CSI → UART 460800 → PC → predict.py →
 3. ✅ TX genera tráfico UDP a 20 Hz
 4. ✅ RX imprime CSI_DATA (460800 baud)
 5. ✅ PC visualiza CSI_DATA y predice
+6. ✅ Dashboard web recibe y muestra predicciones en tiempo real
 
 ## HISTORIAL DE SESIONES
 
@@ -39,12 +40,22 @@ ESP32 TX → WiFi → ESP32 RX → CSI → UART 460800 → PC → predict.py →
 - **Pipeline extremo a extremo verificada**: TX → UDP → RX → CSI → UART → PC → model.pkl → PREDICTION.
 - **Limitación**: modelo entrenado en modo STA en laboratorio diferente; predice "0" consistentemente en entorno actual (AP mode).
 
+### Sesión 4 — Dashboard web + .env + limpieza (25 Jun 2026)
+- **Dashboard web**: `aws_deploy/app.py` desplegado en EC2, predicciones visibles en tiempo real.
+- **live_predict.py**: conectado al dashboard vía `--aws-url`, implementado fallback a `.env` con `python-dotenv`.
+- **Configuración externalizada**: creado `.env.example` con `DASHBOARD_URL`, `SERIAL_PORT`, `SERIAL_BAUD`.
+- **README actualizado**: agregado entorno de desarrollo, recolección de dataset, dashboard local/remoto.
+- **Git cleanup**: `datos/` (16 CSV con MAC real) y `model.pkl` removidos del tracking; `.env`, `datos/` y `model.pkl` agregados a `.gitignore`.
+- **pdMS_TO_TICKS perdido**: el `git restore` de submodules revirtió el bugfix `vTaskDelay(w)` → la tasa de paquetes TX volvió a ~2 Hz. Pendiente re-aplicar.
+
 ## PROBLEMAS CONOCIDOS
 1. **Modelo no sensible al entorno actual**: necesita reentrenarse con datos del entorno vivo (o recolectar nuevo dataset etiquetado en AP mode).
 2. **TX output ruidoso**: WiFi BA debug messages (`ssn:0, winSize:64`) saturan USB0. No afecta funcionalidad pero es molesto.
 3. **RX baud rate**: bootloader a 115200, app cambia a 460800 → ~0.5s de basura al inicio.
+4. **pdMS_TO_TICKS perdido**: bugfix revertido al limpiar submodules. TX envía a ~2 Hz en vez de 20 Hz.
 
 ## PRÓXIMOS PASOS
-1. Probar estabilidad ≥ 5 min.
-2. Recolectar CSI en vivo con etiquetas para reentrenar modelo.
-3. Si modelo no mejora, experimentar con features (más estadísticas, ventanas más grandes).
+1. Re-aplicar bugfix `pdMS_TO_TICKS` en ambos submodules (1 línea c/u).
+2. Probar estabilidad ≥ 5 min con tasa correcta de paquetes.
+3. Recolectar CSI en vivo con etiquetas para reentrenar modelo.
+4. Si modelo no mejora, experimentar con features (más estadísticas, ventanas más grandes).
