@@ -1,5 +1,7 @@
 # WiFi CSI People Counter — Pipeline completo: captura + inferencia + dashboard
-
+**Integrantes:** 
+- Oscar David Barrientos Huillca - 225419
+- Brayan Rodrigo Quispe Castillo - 221986
 ## Pipeline
 
 ```
@@ -8,6 +10,8 @@ ESP32 TX  ── WiFi ──>  ESP32 RX  ── UART 460800 ──>  PC (live_pr
 ```
 
 Hardware: 2× ESP32 + 2× cables USB-UART + PC con Linux.
+
+![Dashboard web desplegado en EC2](image.png)
 
 ## Entorno de desarrollo
 
